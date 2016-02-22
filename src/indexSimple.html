@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+@import url(css/style.css);
+
+    .axis {
+        stroke: #000;
+        stroke-width: 1.5px;
+    }
+
+    .node circle {
+        stroke: #000;
+    }
+
+    .link {
+        fill: none;
+        stroke: #999;
+        stroke-width: 1.5px;
+        stroke-opacity: .3;
+    }
+
+    .link.active {
+        stroke: red;
+        stroke-width: 2px;
+        stroke-opacity: 1;
+    }
+
+    .node circle.active {
+        stroke: red;
+        stroke-width: 3px;
+    }
+
+</style>
+
+<body>
+<p id="algo">Probando cosas</p>
+
+<script src="http://d3js.org/d3.v3.min.js" type="text/javascript"></script>
+<script src="js/libs/d3.hive.min.js" type="text/javascript"></script>
+<script src="js/libs/jquery-1.11.3.min.js" type="text/javascript"></script>
+
+<script>
+
+
+    var width = 960,
+        height = 850,
+        innerRadius = 40,
+        outerRadius = 640,
+        majorAngle = 2 * Math.PI / 3,
+        minorAngle = 1 * Math.PI / 12;
+
+    /*var angle = d3.scale.ordinal()
+        .domain(["source", "source-target", "target-source", "target"])
+        .range([0, majorAngle - minorAngle, majorAngle + minorAngle, 2 * majorAngle]);
+
+    var radius = d3.scale.linear()
+        .range([innerRadius, outerRadius]);
+
+    var color = d3.scale.category10();*/
+
+    //Crear un gráfico
+   /* var svg = d3.select("chart").append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        //.append("g")
+        //.attr("transform", "translate(" + outerRadius * .20 + "," + outerRadius * .57 + ")");
+*/
+    var svg=d3.select("body").append("svg").attr("width", width).attr("height", height);
+    //svg.append("circle").attr("cx", 25).attr("cy", 25).attr("r", 25).style("fill", "purple");    //Mapear datos a elementos visuales
+    var data=[{"x": 51.0, "y": 51.1}, {"x": 72.0, "y": 72.5}];
+
+    var circles=svg.selectAll("circle") //dentro de svg
+        .data(data) //coges estos datos
+        .enter().append("circle")   //y los metes como tags "circle"
+        .attr("cx", function(d) { return d.x; })//con estos argumentos (la 'd' se refiere a los datos, se puede añadir una 'i' con la iteración)
+        .attr("cy", function(d) { return d.y; })
+        .attr("r", 2.5)
+        .attr("style", "fill:steelblue;");
+
+</script>
+</body>

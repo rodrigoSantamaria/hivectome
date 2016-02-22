@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+@import url(css/style.css);
+
+    .axis {
+        stroke: #000;
+        stroke-width: 1.5px;
+    }
+
+    .node circle {
+        stroke: #000;
+    }
+
+    .link {
+        fill: none;
+        stroke: #999;
+        stroke-width: 1.5px;
+        stroke-opacity: .3;
+    }
+
+    .link.active {
+        stroke: red;
+        stroke-width: 2px;
+        stroke-opacity: 1;
+    }
+
+    .node circle.active {
+        stroke: red;
+        stroke-width: 3px;
+    }
+
+</style>
+<body>
+
+<script src="http://d3js.org/d3.v3.min.js" type="text/javascript"></script>
+<script src="js/libs/d3.hive.min.js" type="text/javascript"></script>
+<script src="js/libs/jquery-1.11.3.min.js" type="text/javascript"></script>
+
+<aside>
+    <p id="info">Building hiveplot...</p>
+</aside>
+
+<script>
+
+
+    var width = 960,
+        height = 850,
+        innerRadius = 20,
+        outerRadius = 300,
+        majorAngle = 2 * Math.PI / 3,
+        minorAngle = 1 * Math.PI / 12;
+
+    var angle = d3.scale.ordinal()
+        .domain(["source", "source-target", "target-source", "target"])
+        .range([0, majorAngle - minorAngle, majorAngle + minorAngle, 2 * majorAngle]);
+
+    var radius = d3.scale.linear()
+        .range([innerRadius, outerRadius]);
+
+    var color = d3.scale.category10();
+
+    var svg = d3.select("body").append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr("transform", "translate(" + outerRadius *1.2 + "," + outerRadius * 1.2 + ")");
+
+    // Load the data and display the plot!
+    //d3.json("simpleQ1small.json", function(interactions) {
+    d3.json("simpleQ1mid.json", function(interactions) {
+            //d3.json("simpleQ1.json", function(interactions) {
+            console.log("vamos a leer")
+        var nodesByName = {},
+            nodes = [],
+            links = [],
+            formatNumber = d3.format(",d"),
+            defaultInfo,
+            numNodes= 0,
+            maxDegree=0;
+        var axes=[270, 30,150]
+
+        console.log(intersect([1,3,4,56],[1,4,3,77,88]))
+        //axes.forEach(function(element, index, array){ console.log(element, index, array); });
+        // Construct an index by node name.
+        interactions.forEach(function(d) {
+            d.connectors = [];
+            //if(d.UniprotName_A.search("_")>=0 || d.UniprotName_B.search("_")>=0)
+            //if(d.UniprotName_A.search("_BOVIN")>=0 || d.UniprotName_A.search("_MOUSE")>=0 || d.UniprotName_A.search("_RAT")>=0 ||
+            //    d.UniprotName_B.search("_BOVIN")>=0 || d.UniprotName_B.search("_MOUSE")>=0 || d.UniprotName_B.search("_RAT")>=0)
+            //    ;
+            //else {
+                if (!nodesByName.hasOwnProperty(d.UniprotName_A)) {
+                    nodesByName[d.UniprotName_A] = {name: d.UniprotName_A, degree: 0, type: 0, neighbors: [], angle:0, cc:-1};
+                    numNodes++;
+                }
+                if (!nodesByName.hasOwnProperty(d.UniprotName_B)) {
+                    nodesByName[d.UniprotName_B] = {name: d.UniprotName_B, degree: 0, type: 0, neighbors: [], angle:0, cc:-1};
+                    numNodes++;
+                }
+
+                nodesByName[d.UniprotName_A].neighbors.push(d.UniprotName_B);
+                nodesByName[d.UniprotName_B].neighbors.push(d.UniprotName_A);
+                nodesByName[d.UniprotName_A].degree++;
+                nodesByName[d.UniprotName_B].degree++;
+                if (nodesByName[d.UniprotName_A].degree >= 10 && nodesByName[d.UniprotName_A].type <= 0)
+                    nodesByName[d.UniprotName_A].type++;
+                if (nodesByName[d.UniprotName_B].degree >= 10 && nodesByName[d.UniprotName_B].type <= 0)
+                    nodesByName[d.UniprotName_B].type++;
+                if (nodesByName[d.UniprotName_A].degree >= 100 && nodesByName[d.UniprotName_A].type <= 1)
+                    nodesByName[d.UniprotName_A].type++;
+                if (nodesByName[d.UniprotName_B].degree >= 100 && nodesByName[d.UniprotName_B].type <= 1)
+                    nodesByName[d.UniprotName_B].type++;
+                links.push({source: nodesByName[d.UniprotName_A], target: nodesByName[d.UniprotName_B]});
+         //   }
+
+            //console.log("adding ", d.UniprotName_A);
+        });
+
+        console.log("nodesByName y links construidos ");
+        for(var key in nodesByName)
+            {
+            d=nodesByName[key];
+            d.angle=(axes[d.type]);
+            d.radius=(d.degree/Math.pow(10,d.type+1))*(outerRadius-innerRadius);
+            d.cc=clusteringCoefficient(d,nodesByName);
+            console.log(d.name+" cc: "+ d.cc);
+            nodes.push({"name": d.name, "degree": d.degree, "type": d.type, "angle":d.angle, "radius": d.radius});
+            if(d.degree>maxDegree)
+                maxDegree= d.degree;
+            }
+        console.log("maxDegree",maxDegree)
+
+        // Initialize the info display.
+        var info = d3.select("#info")
+            .text(defaultInfo = "Showing " + formatNumber(links.length) + " interactions among " + formatNumber(nodes.length) + " proteins.");
+
+        // Normally, Hive Plots sort interactions by degree along each axis. However, since
+        // this example visualizes a package hierarchy, we get more interesting
+        // results if we group interactions by package. We don't need to sort explicitly
+        // because the data file is already sorted by class name.
+        // Nest interactions by type, for computing the rank.
+       var nodesByType = d3.nest()
+            .key(function(d) { return d.type; })
+            .sortKeys(d3.ascending)
+            .entries(interactions);
+
+        svg.selectAll(".axis")
+            .data(axes)
+            .enter().append("line")
+            .attr("class", "axis")
+            .attr("transform", function(d) { return "rotate(" + d + ")"; })
+            .style("color", "green")
+            .attr("x1", innerRadius)
+            .attr("x2", outerRadius);
+
+        // Draw the links.
+        svg.append("g")
+            .attr("class", "links")
+            .selectAll(".link")
+            .data(links)
+            .enter().append("path")
+            .attr("class", "link")
+            .attr("d", link())
+           //     .angle(function(d) { return angle(d.type); })
+           //     .radius(function(d) { return radius(d.degree); }))
+            .on("mouseover", linkMouseover)
+            .on("mouseout", mouseout);
+
+
+        svg.selectAll(".nodes")
+            .data(nodes)//NOTE: must be an array, not a hash
+            .enter().append("circle")
+            .attr("class", "node")
+            .attr("transform", function(d) { return "rotate(" + d.angle + ")" })
+            .style("fill", "green")//NOTE: no idea how to add color
+            .attr("cx", function(d) { return d.radius })
+            .attr("cy", 0)
+            .attr("r", 4)
+            .on("mouseover", nodeMouseover)
+            .on("mouseout", mouseout);
+
+        // Highlight the link and connected interactions on mouseover.
+        function linkMouseover(d) {
+            svg.selectAll(".link").classed("active", function(p) { return p === d; });
+            svg.selectAll(".node circle").classed("active", function(p) { return p === d.source || p === d.target; });
+            info.text(d.source.name + " → " + d.target.name);
+        }
+
+        // Highlight the node and connected links on mouseover.
+        function nodeMouseover(d) {
+            svg.selectAll(".link").classed("active", function(p) { return p.source.name === d.name || p.target.name === d.name; });
+            d3.select(this).classed("active", true);
+            info.text(d.name +", "+ d.degree +" interactions");
+        }
+
+        // Clear any highlighted interactions or links.
+        function mouseout() {
+            svg.selectAll(".active").classed("active", false);
+            //info.text(defaultInfo);
+        }
+    });
+
+    function intersect(a,b)
+        {
+            var n=0;
+            for(var i=0;i< a.length;i++)
+                {
+                    if(b.indexOf(a[i])>=0)
+                        n++;
+                }
+            return n;
+        }
+    function clusteringCoefficient(node, nodesByName) {
+        var den = Math.max(1, node.degree * (node.degree - 1));//maximum number of edges in the neighbourhood (i.e. edges in the clique)
+        //var numE= d.degree;//number of edges in the neighbourhood (i.e. real number of edges)
+        var numE = 0;//number of edges in the neighbourhood (i.e. real number of edges)
+        //var n= d.neighbors;
+        node.neighbors.forEach(function (d) {
+            numE+=intersect(node.neighbors, nodesByName[d].neighbors)
+            //console.log(numE);
+        });
+        numE/=2.0;
+        numE+=node.degree;
+        return 2.0*numE/den;
+    }
+    // A shape generator for Hive links, based on a source and a target.
+    // The source and target are defined in polar coordinates (angle and radius).
+    // Ratio links can also be drawn by using a startRadius and endRadius.
+    // This class is modeled after d3.svg.chord.
+    function link() {
+        var source = function(d) { return d.source; },
+            target = function(d) { return d.target; },
+        angle = function(d) { return d.angle; },
+        startRadius = function(d) { return d.radius; },
+        //    angle = function(d) { return d.type; },
+        //    startRadius = function(d) { return d.degree; },
+            endRadius = startRadius,
+            //startRadius = function(d) { return d.source.radius; },
+            //endRadius = function(d) { return d.target.radius; },
+            arcOffset = -Math.PI / 2;
+
+        function link(d, i) {
+            var s = node(d.source, this, d, i),
+                t = node(d.target, this, d, i),
+                x;
+            t.a=radians(t.a);
+            s.a=radians(s.a);
+
+           /* if(d.source.name=="UBA6") {
+                console.log("Dentro de node " + d.source.name+" -> "+ d.target.name);
+                console.log(s.a + " " + s.r0 + " " + s.r1);
+                console.log(t.a + " " + t.r0 + " " + t.r1);
+            }*/
+
+            if (t.a < s.a) x = t, t = s, s = x;
+            if (t.a - s.a > Math.PI) s.a += 2 * Math.PI;
+
+            var a1 = s.a + (t.a - s.a) / 3,
+                a2 = t.a - (t.a - s.a) / 3;
+            return s.r0 - s.r1 || t.r0 - t.r1
+                ? "M" + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+            + "L" + Math.cos(s.a) * s.r1 + "," + Math.sin(s.a) * s.r1
+            + "C" + Math.cos(a1) * s.r1 + "," + Math.sin(a1) * s.r1
+            + " " + Math.cos(a2) * t.r1 + "," + Math.sin(a2) * t.r1
+            + " " + Math.cos(t.a) * t.r1 + "," + Math.sin(t.a) * t.r1
+            + "L" + Math.cos(t.a) * t.r0 + "," + Math.sin(t.a) * t.r0
+            + "C" + Math.cos(a2) * t.r0 + "," + Math.sin(a2) * t.r0
+            + " " + Math.cos(a1) * s.r0 + "," + Math.sin(a1) * s.r0
+            + " " + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+                : "M" + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+            + "C" + Math.cos(a1) * s.r1 + "," + Math.sin(a1) * s.r1
+            + " " + Math.cos(a2) * t.r1 + "," + Math.sin(a2) * t.r1
+            + " " + Math.cos(t.a) * t.r1 + "," + Math.sin(t.a) * t.r1;
+        }
+
+        /*function node(method, thiz, d, i) {
+            var node = method.call(thiz, d, i),
+                a = +(typeof angle === "function" ? angle.call(thiz, node, i) : angle) + arcOffset,
+                r0 = +(typeof startRadius === "function" ? startRadius.call(thiz, node, i) : startRadius),
+                r1 = (startRadius === endRadius ? r0 : +(typeof endRadius === "function" ? endRadius.call(thiz, node, i) : endRadius));
+            console.log("Dentro de node "+d.name);
+            return {r0: r0, r1: r1, a: a};
+        }*/
+
+        function node(node, thiz, d, i) {
+         //var a = +(typeof angle === "function" ? angle.call(thiz, node, i) : angle) + arcOffset,
+         var a = +(typeof angle === "function" ? angle.call(thiz, node, i) : angle),// + arcOffset,
+                r0 = +(typeof startRadius === "function" ? startRadius.call(thiz, node, i) : startRadius),
+            r1 = (startRadius === endRadius ? r0 : +(typeof endRadius === "function" ? endRadius.call(thiz, node, i) : endRadius));
+            return {r0: r0, r1: r1, a: a};
+         }
+
+        link.source = function(_) {
+            if (!arguments.length) return source;
+            source = _;
+            return link;
+        };
+
+        link.target = function(_) {
+            if (!arguments.length) return target;
+            target = _;
+            return link;
+        };
+
+        link.angle = function(_) {
+            if (!arguments.length) return angle;
+            angle = _;
+            return link;
+        };
+
+        link.radius = function(_) {
+            if (!arguments.length) return startRadius;
+            startRadius = endRadius = _;
+            return link;
+        };
+
+        link.startRadius = function(_) {
+            if (!arguments.length) return startRadius;
+            startRadius = _;
+            return link;
+        };
+
+        link.endRadius = function(_) {
+            if (!arguments.length) return endRadius;
+            endRadius = _;
+            return link;
+        };
+
+        return link;
+    };
+
+
+    Object.size = function(obj) {
+        var size = 0, key;
+        for (key in obj) {
+            if (obj.hasOwnProperty(key)) size++;
+        }
+        return size;
+    };
+
+    function degrees(radians) {
+        return radians / Math.PI * 180 - 90;
+    }
+    function radians(degrees) {
+        return (degrees * Math.PI * 2)/360;
+    }
+
+</script>
+</body>

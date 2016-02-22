@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+@import url(css/style.css);
+
+.axis {
+    stroke: #000;
+    stroke-width: 1px;
+    stroke-opacity: 0.5;
+}
+.axis.label {
+    fill: black;
+}
+
+.node {
+    fill: #FFF;
+    fill-opacity: 0.2;
+    stroke: #000;
+    stroke-width: 1px;
+    stroke-opacity:1;
+    }
+
+    .label {
+        fill: #000;
+        fill-opacity: 2;
+        stroke: #FFF;
+        stroke-width:2px;
+        stroke-opacity: 0.4;
+
+    }
+
+    .label.active {
+        fill: #C00;
+        fill-opacity: 1;
+        stroke: #FFF;
+        stroke-width:0.5px;
+        stroke-opacity: 0.5;
+    }
+
+    .link {
+        fill: none;
+        stroke: #999;
+        stroke-width: 1px;
+        stroke-opacity: .2;
+    }
+
+    .link.active {
+        stroke: #C00;
+        stroke-width: 3px;
+        stroke-opacity: 0.9;
+    }
+
+    .node.active {
+        stroke: #C00;
+        stroke-width: 3px;
+    }
+
+</style>
+<body>
+
+<script src="http://d3js.org/d3.v3.min.js" type="text/javascript"></script>
+<script src="js/libs/d3.hive.min.js" type="text/javascript"></script>
+<script src="js/libs/jquery-1.11.3.min.js" type="text/javascript"></script>
+
+<aside>
+    <p id="info0">Building hiveplot...</p>
+    <p id="info"></p>
+</aside>
+
+<script>
+
+
+    var width = 960,
+        height = 850,
+        innerRadius = 20,
+        outerRadius = 300,
+        majorAngle = 2 * Math.PI / 3,
+        minorAngle = 1 * Math.PI / 12;
+        cct1=0.25, cct2=0.5;
+
+    var angle = d3.scale.ordinal()
+        .domain(["source", "source-target", "target-source", "target"])
+        .range([0, majorAngle - minorAngle, majorAngle + minorAngle, 2 * majorAngle]);
+
+
+
+    var color = d3.scale.category10();
+
+    var svg = d3.select("body").append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr("transform", "translate(" + outerRadius *1.2 + "," + outerRadius * 1.2 + ")");
+
+    // Load the data and display the plot!
+    //d3.json("simpleQ1small.json", function(interactions) {
+    //d3.json("simpleQ1mid.json", function(interactions) {
+    d3.json("simpleQ1large.json", function(interactions) {
+    //d3.json("simpleQ1.json", function(interactions) {
+
+        //Var declaration
+        var nodesByName = {},
+            nodes = [],
+            links = [],
+            formatNumber = d3.format(",d"),
+            defaultInfo,
+            numNodes= 0,
+            maxAbsoluteDegree= 0,
+            maxDegree=0;
+
+        //axes now set to three pairs
+        //var axes=[270, 30,150]
+        //var axes=[260, 280, 20, 40, 140, 160];
+        var axes=[255, 285, 15, 45, 135, 165];
+
+        var axesLabels=["cc < "+cct1,cct1+" < cc <= "+cct2,"cc > "+cct2];
+
+        // Construct an index by node name.
+        interactions.forEach(function(d) {
+            d.connectors = [];
+            if(d.UniprotName_A== d.UniprotName_B ||                                 //Remove reflexive interactions
+                d.UniprotName_A.search("_")>=0 || d.UniprotName_B.search("_")>=0 )   //Remove interspecies interactions
+
+                ;
+            else
+            //if(d.UniprotName_A.search("UB")>=0 || d.UniprotName_B.search("UB")>=0 )
+               // d.UniprotName_A.search("RP")>=0 || d.UniprotName_B.search("RP")>=0 ||
+              //  d.UniprotName_A.search("TF")>=0 || d.UniprotName_B.search("TF")>=0)
+                {
+
+                if(!nodesByName.hasOwnProperty(d.UniprotName_A)){
+                    nodesByName[d.UniprotName_A] = {name: d.UniprotName_A, degree: 0, type: 0, neighbors: [], visualNodes:[], cc:-1};
+                    numNodes++;
+                }
+                if (!nodesByName.hasOwnProperty(d.UniprotName_B)) {
+                    nodesByName[d.UniprotName_B] = {name: d.UniprotName_B, degree: 0, type: 0, neighbors: [], visualNodes:[], cc:-1};
+                    numNodes++;
+                }
+
+                nodesByName[d.UniprotName_A].neighbors.push(d.UniprotName_B);
+                nodesByName[d.UniprotName_B].neighbors.push(d.UniprotName_A);
+                nodesByName[d.UniprotName_A].degree++;
+                nodesByName[d.UniprotName_B].degree++;
+                if (nodesByName[d.UniprotName_A].degree >= 10 && nodesByName[d.UniprotName_A].type <= 0)
+                    nodesByName[d.UniprotName_A].type++;
+                if (nodesByName[d.UniprotName_B].degree >= 10 && nodesByName[d.UniprotName_B].type <= 0)
+                    nodesByName[d.UniprotName_B].type++;
+                if (nodesByName[d.UniprotName_A].degree >= 100 && nodesByName[d.UniprotName_A].type <= 1)
+                    nodesByName[d.UniprotName_A].type++;
+                if (nodesByName[d.UniprotName_B].degree >= 100 && nodesByName[d.UniprotName_B].type <= 1)
+                    nodesByName[d.UniprotName_B].type++;
+                links.push({source: nodesByName[d.UniprotName_A], target: nodesByName[d.UniprotName_B]});
+                if(maxDegree<nodesByName[d.UniprotName_A].degree)
+                    maxDegree=nodesByName[d.UniprotName_A].degree
+                if(maxDegree<nodesByName[d.UniprotName_B].degree)
+                    maxDegree=nodesByName[d.UniprotName_B].degree
+
+            }
+
+        });
+
+        console.log("maxDegree es "+maxDegree);
+        console.log("nodesByName y links construidos ");
+
+        //Build the visual nodes (2 per protein) and compute their clustering coefficient
+        //The nodes will be displayed on the three pairs of axes based on their clustering coefficients
+        //The nearest-to-clique nodes will be in the top axis (cc<0.25), the near-to-single nodes in the left (cc>.5)
+        //while the right one will have the intermediate ones (.25<cc<.5)
+        for(var key in nodesByName)
+            {
+            d=Object.create(nodesByName[key]);
+            d.cc=clusteringCoefficient(d,nodesByName);
+            //d.radius=(d.degree/Math.pow(10,d.type+1))*(outerRadius-innerRadius);
+            d.radius=((d.degree-1)/(maxDegree-1))*(outerRadius-innerRadius);
+
+            if(d.cc<cct1)               d.type=0;
+            if(d.cc>=cct1 && d.cc<cct2)  d.type=1;
+            if(d.cc>=cct2)                d.type=2;
+            nodesByName[key].type= d.type;
+            d.angle=(axes[d.type*2]);
+            nodes.push({"name": d.name, "degree": d.degree, "type": d.type, "angle":d.angle, "radius": d.radius});
+
+            d2= Object.create(d);
+            d2.angle=(axes[d.type*2+1]);
+            nodes.push({"name": d2.name, "degree": d2.degree, "type": d2.type, "angle":d2.angle, "radius": d2.radius});
+
+            nodesByName[key].visualNodes.push(d);
+            nodesByName[key].visualNodes.push(d2);
+            }
+
+        console.log("maxDegree",maxDegree);
+
+        //On each axis, nodes will be displayed based on their degree. To avoid large differences we use a log scale
+        //To avoid overlap, we separate a little the location of each node.
+        //var radius = d3.scale.log().base(10).domain([1,maxDegree])
+          //  .range([innerRadius, outerRadius]);
+        var radius = d3.scale.log().domain([1,maxDegree])
+            .range([innerRadius, outerRadius]);
+
+        numDegree={}
+        nodes.forEach(function(d)
+            {//Commented code to separate
+            /*if(!numDegree.hasOwnProperty(d.degree))
+                numDegree[d.degree]=0;
+            else
+                numDegree[d.degree]+=0.03;*/
+            d.radius=radius(d.degree);//+numDegree[d.degree]
+            nodesByName[d.name].visualNodes[0].radius= d.radius;
+            nodesByName[d.name].visualNodes[1].radius= d.radius;
+            });
+
+
+        // Initialize the info display.
+        var info0 = d3.select("#info0")
+            .text(defaultInfo = "Network with " + formatNumber(links.length) + " interactions among " + formatNumber(nodes.length*0.5) + " proteins.");
+        var info = d3.select("#info").text(defaultInfo = "You can mouse over nodes or edges");
+
+        //Draw the axes
+        svg.selectAll(".axis")
+            .data(axes)
+            .enter().append("line")
+            .attr("class", "axis")
+            .attr("transform", function(d) { return "rotate(" + d + ")"; })
+            .attr("x1", innerRadius)
+            .attr("x2", outerRadius);
+
+        //Draw axes labels
+        svg.selectAll(".axis.label")
+            .data(axesLabels)
+            .enter().append("text")
+            .attr("class", "axis.label")
+            .style("text-anchor", "middle")
+            .attr("transform", function(d, i) { return "rotate(" + (axes[i*2]+15) + ") translate("+outerRadius+",0) rotate(" + (i==0?90:-90) + ")"; })
+            .text(function(d) {return d});
+
+
+        // Draw the links.
+        svg.append("g")
+            .selectAll(".link")
+            .data(links)
+            .enter().append("path")
+            .attr("class", "link")
+            .attr("d", link())
+            .on("mouseover", linkMouseover)
+            .on("mouseout", mouseout);
+
+
+        //Draw the nodes
+        var vn=svg.append("g")
+            .selectAll(".node")
+            .data(nodes)//NOTE: must be an array, not a hash
+            .enter().append("circle")
+            .attr("class", "node")
+            .attr("transform", function(d) { return "rotate(" + d.angle + ")" })
+            .attr("cx", function(d) {  return d.radius })
+            .attr("cy", 0)
+             .attr("r", 4)
+             .on("mouseover", nodeMouseover)
+             .on("mouseout", mouseout);
+
+        //draw the labels (now only on hover)
+        var labs;
+
+
+        // Highlight the link and connected interactions on mouseover.
+        function linkMouseover(d) {
+            svg.selectAll(".link").classed("active", function(p) { return p === d; });
+            svg.selectAll(".node").classed("active", function(p) { return p.name === d.source.name || p.name === d.target.name; });
+            //svg.selectAll("text").classed("active", function(p) { return p.name === d.source.name || p.name === d.target.name });
+
+            labs=svg.selectAll(".label").data(nodes.filter(function(p) { return p.name === d.source.name || p.name === d.target.name }))
+                .enter()
+                .append("text")
+                .attr("class", "label")
+                .attr("transform", function(d, i) { return "rotate(" + d.angle + ") translate("+ radius(d.degree)+",0) rotate(" + (d.angle!=axes[0]?(90-(d.angle%90)-90* d.type):(180-(d.angle%90))) + ")"; })
+                .attr("x", 0)
+                .attr("y", -8)
+                .attr("text-anchor", "middle")
+                .text(function(d){return d.name})
+            //info.text(d.source.name + " → " + d.target.name);
+            info.text(d.source.name + " - " + d.target.name);
+        }
+
+        // Highlight the node and connected links on mouseover.
+        function nodeMouseover(d) {
+            svg.selectAll(".link").classed("active", function(p) { return p.source.name === d.name || p.target.name === d.name; });
+
+            vn.classed("active", function(p) { return p.name === d.name})
+            labs=svg.selectAll(".label").data(nodes.filter(function(p) { return p.name === d.name}))
+                .enter()
+                .append("text")
+                .attr("class", "label")
+                .attr("transform", function(d, i) { return "rotate(" + d.angle + ") translate("+ radius(d.degree)+",0) rotate(" + (d.angle!=axes[0]?(90-(d.angle%90)-90* d.type):(180-(d.angle%90))) + ")"; })
+                .attr("x", 0)
+                .attr("y", -8)
+                .attr("text-anchor", "middle")
+                .text(function(d){return d.name})
+
+
+            info.text(d.name +", "+ d.degree +" interactions");
+        }
+
+        // Clear any highlighted interactions or links.
+        function mouseout() {
+            svg.selectAll(".active").classed("active", false);
+            info.text(defaultInfo);
+            labs.remove();
+        }
+    });
+
+    function intersect(a,b)
+        {
+            var n=0;
+            for(var i=0;i< a.length;i++)
+                {
+                    if(b.indexOf(a[i])>=0)
+                        n++;
+                }
+            return n;
+        }
+
+    /* Computes clustering coefficient as in https://en.wikipedia.org/wiki/Clustering_coefficient
+     *It considers there are no reflexive edges, and cc for nodes with only 1 edge is 0
+     */
+    function clusteringCoefficient(node, nodesByName) {
+        if(node.degree==1)
+            return 0
+
+        var den = node.degree * (node.degree - 1);//maximum number of edges in the neighbourhood (i.e. edges in the clique)
+        var numE = 0;//number of edges in the neighbourhood (i.e. real number of edges)
+        //var n= d.neighbors;
+        node.neighbors.forEach(function (d) {
+                numE+=intersect(node.neighbors, nodesByName[d].neighbors)
+            //console.log(numE);
+        });
+        //if(node.neighbors.indexOf(node.name)>=0)    //if it has a reflexive edge, we should remove these coincidences from the above loop
+        //    numE-=node.degree
+        return (numE)/den;
+    }
+
+
+
+
+    // A shape generator for Hive links, based on a source and a target.
+    // The source and target are defined in polar coordinates (angle and radius).
+    // Ratio links can also be drawn by using a startRadius and endRadius.
+    // This class is modeled after d3.svg.chord.
+    function link() {
+        var source = function(d) { return d.source; },
+            target = function(d) { return d.target; },
+        angle = function(d) { return d.angle; },
+        startRadius = function(d) { /*return d.radius;*/ return d.radius },
+        endRadius = startRadius,
+        arcOffset = -Math.PI / 2;
+
+        function link(d, i) {
+            var s, t, x;
+            if (d.source.type == d.target.type) {
+                s = d.source.visualNodes[0];
+                t = d.target.visualNodes[1];
+            }
+            if ((d.source.type == 0 && d.target.type == 1) || (d.source.type == 2 && d.target.type == 0) || (d.source.type == 1 && d.target.type == 2)) {
+                s = d.source.visualNodes[1];
+                t = d.target.visualNodes[0];
+            }
+            if ((d.source.type == 1 && d.target.type == 0) || (d.source.type == 0 && d.target.type == 2) || (d.source.type == 2 && d.target.type == 1)) {
+                s = d.source.visualNodes[0];
+                t = d.target.visualNodes[1];
+            }
+
+
+            s.a = s.angle;
+            t.a = t.angle;
+            t.r0 = t.r1 = t.radius;//radius(t.degree);
+            s.r0 = s.r1 = s.radius;//radius(s.degree);
+
+
+            t.a = radians(t.a);
+            s.a = radians(s.a);
+
+            //console.log(t.a+" "+ s.a);
+            if (t.a < s.a) x = t, t = s, s = x;
+            if (t.a - s.a > Math.PI) s.a += 2 * Math.PI;
+
+            var a1 = s.a + (t.a - s.a) / 3,
+                a2 = t.a - (t.a - s.a) / 3;
+            return s.r0 - s.r1 || t.r0 - t.r1
+                ? "M" + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+            + "L" + Math.cos(s.a) * s.r1 + "," + Math.sin(s.a) * s.r1
+            + "C" + Math.cos(a1) * s.r1 + "," + Math.sin(a1) * s.r1
+            + " " + Math.cos(a2) * t.r1 + "," + Math.sin(a2) * t.r1
+            + " " + Math.cos(t.a) * t.r1 + "," + Math.sin(t.a) * t.r1
+            + "L" + Math.cos(t.a) * t.r0 + "," + Math.sin(t.a) * t.r0
+            + "C" + Math.cos(a2) * t.r0 + "," + Math.sin(a2) * t.r0
+            + " " + Math.cos(a1) * s.r0 + "," + Math.sin(a1) * s.r0
+            + " " + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+                : "M" + Math.cos(s.a) * s.r0 + "," + Math.sin(s.a) * s.r0
+            + "C" + Math.cos(a1) * s.r1 + "," + Math.sin(a1) * s.r1
+            + " " + Math.cos(a2) * t.r1 + "," + Math.sin(a2) * t.r1
+            + " " + Math.cos(t.a) * t.r1 + "," + Math.sin(t.a) * t.r1;
+        }
+        return link;
+    };
+
+
+    Object.size = function(obj) {
+        var size = 0, key;
+        for (key in obj) {
+            if (obj.hasOwnProperty(key)) size++;
+        }
+        return size;
+    };
+
+    function degrees(radians) {
+        return radians / Math.PI * 180 - 90;
+    }
+    function radians(degrees) {
+        return (degrees * Math.PI * 2)/360;
+    }
+
+</script>
+</body>
